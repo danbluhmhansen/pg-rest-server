@@ -28,6 +28,17 @@
         ...
       }: let
         inherit (config.rust-project) crane-lib src;
+
+        # openssl-sys needs headers + pkg-config at build time on Linux (reqwest,
+        # tokio-postgres native-tls, etc.).  On Darwin these are harmless.
+        ssl-build-deps = with pkgs; [openssl pkg-config];
+
+        # Shared deps-only artifact used by all check derivations.
+        cargoArtifacts = crane-lib.buildDepsOnly {
+          inherit src;
+          nativeBuildInputs = ssl-build-deps;
+          buildInputs = ssl-build-deps;
+        };
       in {
         # Disable tests in the main build -- they need a running PostgreSQL.
         rust-project.crates.pg-rest-server-resolute.crane.args = {
@@ -43,15 +54,33 @@
           meta.mainProgram = "pg-rest-server-tokio-postgres-deadpool";
         };
 
+        # compat-test uses reqwest which pulls in openssl-sys on Linux.
+        rust-project.crates.compat-test.crane.args = {
+          nativeBuildInputs = ssl-build-deps;
+          buildInputs = ssl-build-deps;
+        };
+
+        # Make SSL build deps available to all crate builds.
+        rust-project.defaults.perCrate.crane.args = {
+          nativeBuildInputs = ssl-build-deps;
+        };
+
         checks = {
           cargo-audit = crane-lib.cargoAudit {inherit src advisory-db;};
           cargo-deny = crane-lib.cargoDeny {inherit src;};
 
+          fmt = crane-lib.cargoFmt {inherit src;};
+
+          unit-tests = crane-lib.cargoTest {
+            inherit src cargoArtifacts;
+            cargoTestExtraArgs = "--lib --all";
+          };
+
           integration-tests = crane-lib.cargoTest {
-            inherit src;
-            cargoArtifacts = crane-lib.buildDepsOnly {inherit src;};
+            inherit src cargoArtifacts;
             pname = "pg-rest-server-integration-tests";
-            buildInputs = with pkgs; [postgresql];
+            nativeBuildInputs = ssl-build-deps;
+            buildInputs = with pkgs; [postgresql openssl];
             preCheck = ''
               export PGDATA=$PWD/pgdata
               export PGHOST=$PWD

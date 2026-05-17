@@ -6,64 +6,12 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  check:
-    name: Check & Lint
+  nix-flake-check:
+    name: Nix Flake Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo check --all-targets
-
-  test-unit:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --lib --all
-
-  test-integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: postgrest_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 54322:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 2s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # GitHub Actions service-container volumes are mounted before
-      # checkout, so we apply the fixtures with psql after the repo is
-      # available instead of bind-mounting them into the container.
-      - name: Apply test fixtures
-        env:
-          PGPASSWORD: postgres
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-          psql -h localhost -p 54322 -U postgres -d postgrest_test -v ON_ERROR_STOP=1 -f test/fixtures/setup.sql
-          psql -h localhost -p 54322 -U postgres -d postgrest_test -v ON_ERROR_STOP=1 -f test/fixtures/setup_extended.sql
-      - run: cargo test -p pg-rest-server-tokio-postgres-pg-wired --test integration
-      - run: cargo test -p pg-rest-server-tokio-postgres-deadpool --test integration
-      - run: cargo test -p pg-rest-server-resolute --test integration
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - uses: DeterminateSystems/magic-nix-cache-action@v8
+      - run: nix --option sandbox relaxed flake check -L --keep-going
