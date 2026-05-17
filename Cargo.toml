@@ -11,6 +11,9 @@ homepage = "https://github.com/joshburgess/pg-rest-server"
 authors = ["Josh Burgess"]
 rust-version = "1.75"
 
+[workspace.metadata.crane]
+name = "pg-rest-server"
+
 [workspace.dependencies]
 pg-wired = "0.4"
 pg-pool = "0.4"
