@@ -10,10 +10,11 @@ use pg_query_engine::{
     ApiRequest, ConflictAction, CountOption, DeleteRequest, FilterNode, FunctionCall,
     InsertRequest, ReadRequest, SelectItem, SqlOutput, UpdateRequest,
 };
+use pg_rest_server_common::auth::JwtClaims;
 use pg_schema_cache::{ReturnType, SchemaCache};
 use resolute::{Client, SharedPool};
 
-use crate::auth::{extract_jwt_claims, JwtClaims};
+use crate::auth::extract_jwt_claims;
 use crate::error::ApiError;
 use crate::state::AppState;
 

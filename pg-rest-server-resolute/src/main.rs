@@ -6,7 +6,7 @@ use std::sync::Arc;
 use clap::Parser;
 use tokio::sync::watch;
 
-use pg_rest_server_resolute::config::AppConfig;
+use pg_rest_server_common::config::AppConfig;
 use pg_rest_server_resolute::state::AppState;
 use resolute::{Client, SharedPool};
 
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config,
         jwt_decoding_key,
         jwt_validation,
-        jwt_cache: pg_rest_server_resolute::auth::JwtCache::new(),
+        jwt_cache: pg_rest_server_common::auth::JwtCache::new(),
     });
 
     {

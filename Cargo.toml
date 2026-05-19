@@ -1,5 +1,14 @@
 [workspace]
-members = ["pg-schema-cache-types", "pg-schema-cache", "pg-query-engine", "pg-rest-server-tokio-postgres-pg-wired", "pg-rest-server-tokio-postgres-deadpool", "pg-rest-server-resolute", "test/compat"]
+members = [
+  "pg-schema-cache-types",
+  "pg-schema-cache",
+  "pg-query-engine",
+  "pg-rest-server-common",
+  "pg-rest-server-tokio-postgres-pg-wired",
+  "pg-rest-server-tokio-postgres-deadpool",
+  "pg-rest-server-resolute",
+  "test/compat",
+]
 resolver = "2"
 
 [workspace.package]

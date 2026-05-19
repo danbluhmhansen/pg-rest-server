@@ -1450,6 +1450,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pg-rest-server-common"
+version = "0.2.0"
+dependencies = [
+ "pg-schema-cache-types",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "pg-rest-server-resolute"
 version = "0.2.0"
 dependencies = [
@@ -1459,6 +1469,7 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "pg-query-engine",
+ "pg-rest-server-common",
  "pg-schema-cache",
  "pg-wired",
  "resolute",
@@ -1483,6 +1494,7 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "pg-query-engine",
+ "pg-rest-server-common",
  "pg-schema-cache",
  "rustls",
  "serde",
@@ -1509,6 +1521,7 @@ dependencies = [
  "jsonwebtoken",
  "pg-pool",
  "pg-query-engine",
+ "pg-rest-server-common",
  "pg-schema-cache",
  "pg-wired",
  "rustls",

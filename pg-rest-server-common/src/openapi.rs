@@ -1,4 +1,4 @@
-use pg_schema_cache::{Column, Function, ReturnType, SchemaCache, Table, Volatility};
+use pg_schema_cache_types::{Column, Function, ReturnType, SchemaCache, Table, Volatility};
 use serde_json::{json, Map, Value};
 
 use crate::config::AppConfig;

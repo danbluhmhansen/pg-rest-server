@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
-use crate::config::AppConfig;
+use pg_rest_server_common::auth::JwtCache;
+use pg_rest_server_common::config::AppConfig;
 use pg_schema_cache::SchemaCache;
 
 pub struct AppState {
@@ -16,7 +17,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub jwt_decoding_key: jsonwebtoken::DecodingKey,
     pub jwt_validation: jsonwebtoken::Validation,
-    pub jwt_cache: crate::auth::JwtCache,
+    pub jwt_cache: JwtCache,
     /// Pre-computed anon setup SQL: "BEGIN; SET LOCAL ROLE \"web_anon\""
     pub anon_setup_sql: String,
 }
@@ -25,8 +26,8 @@ impl AppState {
     /// Regenerate the cached OpenAPI specs from the current schema cache.
     pub fn rebuild_openapi_cache(&self) -> (String, String) {
         let cache = self.schema_cache.borrow().clone();
-        let v2 = crate::openapi::generate_v2(&cache, &self.config).to_string();
-        let v3 = crate::openapi::generate_v3(&cache, &self.config).to_string();
+        let v2 = pg_rest_server_common::openapi::generate_v2(&cache, &self.config).to_string();
+        let v3 = pg_rest_server_common::openapi::generate_v3(&cache, &self.config).to_string();
         (v2, v3)
     }
 }

@@ -1,0 +1,18 @@
+[package]
+name = "pg-rest-server-common"
+description = "Shared types, config, OpenAPI, and auth utilities for pg-rest-server backends."
+keywords = ["postgres", "postgrest", "rest", "api"]
+categories = ["database", "web-programming::http-server"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+pg-schema-cache-types = { path = "../pg-schema-cache-types", version = "0.2.0" }

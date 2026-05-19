@@ -15,7 +15,7 @@ use http_body_util::BodyExt;
 use tokio::sync::watch;
 use tower::ServiceExt; // for oneshot
 
-use pg_rest_server_resolute::config::AppConfig;
+use pg_rest_server_common::config::AppConfig;
 use pg_rest_server_resolute::state::AppState;
 
 const DB_URI: &str = "postgres://authenticator:authenticator@localhost:54322/postgrest_test";
@@ -27,15 +27,15 @@ const JWT_SECRET: &str = "reallyreallyreallyreallyverysafe";
 
 async fn setup() -> axum::Router {
     let config = AppConfig {
-        database: pg_rest_server_resolute::config::DatabaseConfig {
+        database: pg_rest_server_common::config::DatabaseConfig {
             uri: DB_URI.to_string(),
             schemas: vec!["api".to_string()],
             anon_role: "web_anon".to_string(),
             pool_size: 5,
             prepared_statements: true,
         },
-        server: pg_rest_server_resolute::config::ServerConfig::default(),
-        jwt: pg_rest_server_resolute::config::JwtConfig {
+        server: pg_rest_server_common::config::ServerConfig::default(),
+        jwt: pg_rest_server_common::config::JwtConfig {
             secret: JWT_SECRET.to_string(),
         },
     };
@@ -73,7 +73,7 @@ async fn setup() -> axum::Router {
         config,
         jwt_decoding_key,
         jwt_validation,
-        jwt_cache: pg_rest_server_resolute::auth::JwtCache::new(),
+        jwt_cache: pg_rest_server_common::auth::JwtCache::new(),
         anon_role_quoted,
         anon_setup_sql,
     });

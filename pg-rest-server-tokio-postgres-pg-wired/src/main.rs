@@ -4,7 +4,7 @@ use std::sync::Arc;
 use clap::Parser;
 use tokio::sync::watch;
 
-use pg_rest_server_tokio_postgres_pg_wired::config::AppConfig;
+use pg_rest_server_common::config::AppConfig;
 use pg_rest_server_tokio_postgres_pg_wired::state::AppState;
 
 #[derive(Parser)]
@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config,
         jwt_decoding_key,
         jwt_validation,
-        jwt_cache: pg_rest_server_tokio_postgres_pg_wired::auth::JwtCache::new(),
+        jwt_cache: pg_rest_server_common::auth::JwtCache::new(),
     });
 
     // Build initial OpenAPI cache.
