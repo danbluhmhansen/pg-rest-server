@@ -137,8 +137,8 @@ impl From<tokio_postgres::Error> for ApiError {
     }
 }
 
-impl From<pg_schema_cache_tokio_postgres::SchemaCacheError> for ApiError {
-    fn from(e: pg_schema_cache_tokio_postgres::SchemaCacheError) -> Self {
+impl From<pg_schema_cache::SchemaCacheError> for ApiError {
+    fn from(e: pg_schema_cache::SchemaCacheError) -> Self {
         Self::BadRequest(format!("schema cache error: {e}"))
     }
 }

@@ -3,7 +3,9 @@ use std::sync::Arc;
 use resolute::{Client, PgListener};
 use tokio::sync::watch;
 
-use crate::{build_schema_cache, SchemaCache, SchemaCacheError};
+use crate::error::SchemaCacheError;
+use crate::introspection_resolute;
+use pg_schema_cache_types::SchemaCache;
 
 /// Establishes a dedicated PostgreSQL connection, executes `LISTEN` on the
 /// given channel, and rebuilds the [`SchemaCache`] whenever a notification
@@ -25,15 +27,18 @@ pub async fn start_schema_listener(
 ) -> Result<(), SchemaCacheError> {
     let mut listener = PgListener::connect(addr, user, password, database)
         .await
-        .map_err(SchemaCacheError::Database)?;
+        .map_err(SchemaCacheError::ResoluteError)?;
     listener
         .listen(channel_name)
         .await
-        .map_err(SchemaCacheError::Database)?;
+        .map_err(SchemaCacheError::ResoluteError)?;
     tracing::info!("Schema listener started on channel '{channel_name}'");
 
     loop {
-        let notification = listener.recv().await.map_err(SchemaCacheError::Database)?;
+        let notification = listener
+            .recv()
+            .await
+            .map_err(SchemaCacheError::ResoluteError)?;
         if notification.channel != channel_name {
             continue;
         }
@@ -48,7 +53,7 @@ pub async fn start_schema_listener(
                 continue;
             }
         };
-        match build_schema_cache(&client, &schemas).await {
+        match introspection_resolute::build_schema_cache(&client, &schemas).await {
             Ok(cache) => {
                 tx.send(Arc::new(cache)).ok();
                 tracing::info!("Schema cache reloaded");

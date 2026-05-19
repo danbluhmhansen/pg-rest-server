@@ -1,0 +1,27 @@
+[package]
+name = "pg-schema-cache"
+description = "PostgreSQL schema cache with support for both resolute and tokio-postgres backends."
+keywords = ["postgres", "postgresql", "schema", "cache", "introspection"]
+categories = ["database"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+resolute = ["dep:resolute", "dep:resolute-derive"]
+tokio-postgres = ["dep:tokio-postgres"]
+
+[dependencies]
+pg-schema-cache-types = { path = "../pg-schema-cache-types", version = "0.2.0" }
+tokio = { version = "1", features = ["sync", "rt"] }
+tracing = "0.1"
+thiserror = "2"
+
+resolute = { workspace = true, optional = true }
+resolute-derive = { workspace = true, optional = true }
+tokio-postgres = { version = "0.7", optional = true }

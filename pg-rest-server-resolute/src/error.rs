@@ -138,8 +138,8 @@ impl From<resolute::TypedError> for ApiError {
     }
 }
 
-impl From<pg_schema_cache_resolute::SchemaCacheError> for ApiError {
-    fn from(e: pg_schema_cache_resolute::SchemaCacheError) -> Self {
+impl From<pg_schema_cache::SchemaCacheError> for ApiError {
+    fn from(e: pg_schema_cache::SchemaCacheError) -> Self {
         Self::BadRequest(format!("schema cache error: {e}"))
     }
 }

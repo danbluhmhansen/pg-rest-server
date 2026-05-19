@@ -47,7 +47,7 @@ async fn setup() -> axum::Router {
         conn.await.ok();
     });
     let cache =
-        pg_schema_cache_tokio_postgres::build_schema_cache(&client, &config.database.schemas)
+        pg_schema_cache::tokio_postgres::build_schema_cache(&client, &config.database.schemas)
             .await
             .unwrap();
     drop(client);

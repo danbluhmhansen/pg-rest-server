@@ -1459,7 +1459,7 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "pg-query-engine",
- "pg-schema-cache-resolute",
+ "pg-schema-cache",
  "pg-wired",
  "resolute",
  "serde",
@@ -1483,7 +1483,7 @@ dependencies = [
  "hyper",
  "jsonwebtoken",
  "pg-query-engine",
- "pg-schema-cache-tokio-postgres",
+ "pg-schema-cache",
  "rustls",
  "serde",
  "serde_json",
@@ -1509,7 +1509,7 @@ dependencies = [
  "jsonwebtoken",
  "pg-pool",
  "pg-query-engine",
- "pg-schema-cache-tokio-postgres",
+ "pg-schema-cache",
  "pg-wired",
  "rustls",
  "serde",
@@ -1526,22 +1526,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "pg-schema-cache-resolute"
+name = "pg-schema-cache"
 version = "0.2.0"
 dependencies = [
  "pg-schema-cache-types",
  "resolute",
  "resolute-derive",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "pg-schema-cache-tokio-postgres"
-version = "0.2.0"
-dependencies = [
- "pg-schema-cache-types",
  "thiserror 2.0.18",
  "tokio",
  "tokio-postgres",

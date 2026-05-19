@@ -42,7 +42,7 @@ async fn setup() -> axum::Router {
 
     // Schema introspection via a one-off resolute Client.
     let bootstrap = resolute::Client::connect_from_str(DB_URI).await.unwrap();
-    let cache = pg_schema_cache_resolute::build_schema_cache(&bootstrap, &config.database.schemas)
+    let cache = pg_schema_cache::resolute::build_schema_cache(&bootstrap, &config.database.schemas)
         .await
         .unwrap();
     drop(bootstrap);

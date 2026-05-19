@@ -1,16 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use tokio_postgres::Client;
-
 use pg_schema_cache_types::*;
-
-use crate::error::SchemaCacheError;
 
 // ---------------------------------------------------------------------------
 // SQL queries
 // ---------------------------------------------------------------------------
 
-const TABLES_QUERY: &str = "
+pub(crate) const TABLES_QUERY: &str = "
 SELECT
     n.nspname::text AS table_schema,
     c.relname::text AS table_name,
@@ -41,7 +37,7 @@ WHERE n.nspname = ANY($1)
 ORDER BY n.nspname, c.relname
 ";
 
-const COLUMNS_QUERY: &str = "
+pub(crate) const COLUMNS_QUERY: &str = "
 SELECT
     c.table_schema::text,
     c.table_name::text,
@@ -63,7 +59,7 @@ WHERE c.table_schema = ANY($1)
 ORDER BY c.table_schema, c.table_name, c.ordinal_position
 ";
 
-const PRIMARY_KEYS_QUERY: &str = "
+pub(crate) const PRIMARY_KEYS_QUERY: &str = "
 SELECT
     n.nspname::text AS table_schema,
     c.relname::text AS table_name,
@@ -78,7 +74,7 @@ WHERE n.nspname = ANY($1)
 ORDER BY n.nspname, c.relname, a.attnum
 ";
 
-const FOREIGN_KEYS_QUERY: &str = "
+pub(crate) const FOREIGN_KEYS_QUERY: &str = "
 SELECT
     n1.nspname::text AS from_schema,
     c1.relname::text AS from_table,
@@ -103,7 +99,7 @@ WHERE con.contype = 'f'
 GROUP BY n1.nspname, c1.relname, n2.nspname, c2.relname, con.conname
 ";
 
-const FUNCTIONS_QUERY: &str = "
+pub(crate) const FUNCTIONS_QUERY: &str = "
 SELECT
     n.nspname::text AS schema_name,
     p.proname::text AS function_name,
@@ -114,7 +110,10 @@ SELECT
     p.prokind::text AS prokind,
     p.pronargs::int4 AS num_args,
     p.pronargdefaults::int4 AS num_defaults,
-    COALESCE(p.proargnames, ARRAY[]::text[]) AS arg_names,
+    COALESCE(
+        (SELECT array_agg(COALESCE(n, '')) FROM unnest(p.proargnames) AS n),
+        ARRAY[]::text[]
+    ) AS arg_names,
     COALESCE(p.proargmodes::text[], ARRAY[]::text[]) AS arg_modes,
     COALESCE(
         (SELECT array_agg(t.typname::text ORDER BY u.ord)
@@ -131,7 +130,7 @@ WHERE n.nspname = ANY($1)
 ORDER BY n.nspname, p.proname
 ";
 
-const ENUMS_QUERY: &str = "
+pub(crate) const ENUMS_QUERY: &str = "
 SELECT
     t.typname::text AS type_name,
     e.enumlabel::text AS enum_value
@@ -140,36 +139,29 @@ JOIN pg_catalog.pg_enum e ON e.enumtypid = t.oid
 ORDER BY t.typname, e.enumsortorder
 ";
 
-// ---------------------------------------------------------------------------
-// Internal types
-// ---------------------------------------------------------------------------
-
-struct RawForeignKey {
-    from_schema: String,
-    from_table: String,
-    to_schema: String,
-    to_table: String,
-    constraint_name: String,
-    from_columns: Vec<String>,
-    to_columns: Vec<String>,
+// Shared row type for foreign keys, used by both backends.
+pub(crate) struct RawForeignKey {
+    pub(crate) from_schema: String,
+    pub(crate) from_table: String,
+    pub(crate) to_schema: String,
+    pub(crate) to_table: String,
+    pub(crate) constraint_name: String,
+    pub(crate) from_columns: Vec<String>,
+    pub(crate) to_columns: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
-// Public builder
+// Builder: assembles a SchemaCache from pre-loaded data
 // ---------------------------------------------------------------------------
 
-pub(crate) async fn build(
-    client: &Client,
-    schemas: &[String],
-) -> Result<SchemaCache, SchemaCacheError> {
-    let mut tables = load_tables(client, schemas).await?;
-    let columns = load_columns(client, schemas).await?;
-    let primary_keys = load_primary_keys(client, schemas).await?;
-    let raw_fks = load_foreign_keys(client, schemas).await?;
-    let functions = load_functions(client, schemas).await?;
-    let enums = load_enums(client).await?;
-
-    // Assemble: attach columns, PKs, and enum values to each table.
+pub(crate) fn build_from_data(
+    mut tables: Vec<Table>,
+    columns: HashMap<QualifiedName, Vec<Column>>,
+    primary_keys: HashMap<QualifiedName, Vec<String>>,
+    raw_fks: Vec<RawForeignKey>,
+    functions: HashMap<QualifiedName, Function>,
+    enums: HashMap<String, Vec<String>>,
+) -> SchemaCache {
     for table in &mut tables {
         if let Some(cols) = columns.get(&table.name) {
             table.columns = cols.clone();
@@ -197,187 +189,11 @@ pub(crate) async fn build(
 
     let relationships = build_relationships(&raw_fks, &table_map);
 
-    Ok(SchemaCache {
+    SchemaCache {
         tables: table_map,
         relationships,
         functions,
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Query executors
-// ---------------------------------------------------------------------------
-
-async fn load_tables(client: &Client, schemas: &[String]) -> Result<Vec<Table>, SchemaCacheError> {
-    let rows = client.query(TABLES_QUERY, &[&schemas]).await?;
-    let mut tables = Vec::with_capacity(rows.len());
-    for row in &rows {
-        let kind: String = row.get("kind");
-        let is_view = kind == "v" || kind == "m";
-        let insertable: bool = row.get("insertable");
-        let updatable: bool = row.get("updatable");
-        tables.push(Table {
-            name: QualifiedName::new(
-                row.get::<_, String>("table_schema"),
-                row.get::<_, String>("table_name"),
-            ),
-            columns: Vec::new(),
-            column_index: HashMap::new(),
-            primary_key: Vec::new(),
-            is_view,
-            insertable,
-            updatable,
-            deletable: updatable,
-            comment: row.get("comment"),
-        });
     }
-    Ok(tables)
-}
-
-async fn load_columns(
-    client: &Client,
-    schemas: &[String],
-) -> Result<HashMap<QualifiedName, Vec<Column>>, SchemaCacheError> {
-    let rows = client.query(COLUMNS_QUERY, &[&schemas]).await?;
-    let mut map: HashMap<QualifiedName, Vec<Column>> = HashMap::new();
-    for row in &rows {
-        let qn = QualifiedName::new(
-            row.get::<_, String>("table_schema"),
-            row.get::<_, String>("table_name"),
-        );
-        map.entry(qn).or_default().push(Column {
-            name: row.get("column_name"),
-            pg_type: row.get("pg_type"),
-            nullable: row.get("nullable"),
-            has_default: row.get("has_default"),
-            default_expr: row.get("default_expr"),
-            max_length: row.get("max_length"),
-            is_pk: false, // set later from PK query
-            is_generated: row.get("is_generated"),
-            comment: row.get("comment"),
-            enum_values: None, // set later from enum query
-        });
-    }
-    Ok(map)
-}
-
-async fn load_primary_keys(
-    client: &Client,
-    schemas: &[String],
-) -> Result<HashMap<QualifiedName, Vec<String>>, SchemaCacheError> {
-    let rows = client.query(PRIMARY_KEYS_QUERY, &[&schemas]).await?;
-    let mut map: HashMap<QualifiedName, Vec<String>> = HashMap::new();
-    for row in &rows {
-        let qn = QualifiedName::new(
-            row.get::<_, String>("table_schema"),
-            row.get::<_, String>("table_name"),
-        );
-        map.entry(qn).or_default().push(row.get("column_name"));
-    }
-    Ok(map)
-}
-
-async fn load_foreign_keys(
-    client: &Client,
-    schemas: &[String],
-) -> Result<Vec<RawForeignKey>, SchemaCacheError> {
-    let rows = client.query(FOREIGN_KEYS_QUERY, &[&schemas]).await?;
-    let mut fks = Vec::with_capacity(rows.len());
-    for row in &rows {
-        fks.push(RawForeignKey {
-            from_schema: row.get("from_schema"),
-            from_table: row.get("from_table"),
-            to_schema: row.get("to_schema"),
-            to_table: row.get("to_table"),
-            constraint_name: row.get("constraint_name"),
-            from_columns: row.get("from_columns"),
-            to_columns: row.get("to_columns"),
-        });
-    }
-    Ok(fks)
-}
-
-async fn load_functions(
-    client: &Client,
-    schemas: &[String],
-) -> Result<HashMap<QualifiedName, Function>, SchemaCacheError> {
-    let rows = client.query(FUNCTIONS_QUERY, &[&schemas]).await?;
-    let mut map = HashMap::new();
-
-    for row in &rows {
-        let schema_name: String = row.get("schema_name");
-        let function_name: String = row.get("function_name");
-        let prokind: String = row.get("prokind");
-        let volatility_char: String = row.get("volatility");
-        let returns_set: bool = row.get("returns_set");
-        let return_type_name: String = row.get("return_type_name");
-        let num_args: i32 = row.get("num_args");
-        let num_defaults: i32 = row.get("num_defaults");
-        let arg_names: Vec<Option<String>> = row.get("arg_names");
-        let arg_modes: Vec<String> = row.get("arg_modes");
-        let arg_type_names: Vec<String> = row.get("arg_type_names");
-
-        let volatility = match volatility_char.as_str() {
-            "i" => Volatility::Immutable,
-            "s" => Volatility::Stable,
-            _ => Volatility::Volatile,
-        };
-
-        let return_type = if return_type_name == "void" {
-            ReturnType::Void
-        } else if returns_set {
-            ReturnType::SetOf(return_type_name)
-        } else {
-            ReturnType::Scalar(return_type_name)
-        };
-
-        // Build parameter list, filtering to IN/INOUT/VARIADIC only.
-        let has_modes = !arg_modes.is_empty();
-        let mut params = Vec::new();
-        let mut in_count: i32 = 0;
-
-        for (i, type_name) in arg_type_names.iter().enumerate() {
-            let mode = if has_modes {
-                arg_modes.get(i).map(|s| s.as_str()).unwrap_or("i")
-            } else {
-                "i"
-            };
-            if mode == "i" || mode == "b" || mode == "v" {
-                in_count += 1;
-                params.push(FuncParam {
-                    name: arg_names.get(i).and_then(|n| n.clone()).unwrap_or_default(),
-                    pg_type: type_name.clone(),
-                    has_default: in_count > (num_args - num_defaults),
-                });
-            }
-        }
-
-        let qn = QualifiedName::new(schema_name, function_name);
-        map.insert(
-            qn.clone(),
-            Function {
-                name: qn,
-                params,
-                return_type,
-                volatility,
-                is_procedure: prokind == "p",
-                comment: row.get("comment"),
-            },
-        );
-    }
-
-    Ok(map)
-}
-
-async fn load_enums(client: &Client) -> Result<HashMap<String, Vec<String>>, SchemaCacheError> {
-    let rows = client.query(ENUMS_QUERY, &[]).await?;
-    let mut map: HashMap<String, Vec<String>> = HashMap::new();
-    for row in &rows {
-        let type_name: String = row.get("type_name");
-        let value: String = row.get("enum_value");
-        map.entry(type_name).or_default().push(value);
-    }
-    Ok(map)
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +206,6 @@ fn build_relationships(
 ) -> Vec<Relationship> {
     let mut rels = Vec::new();
 
-    // Direct FK relationships: each FK produces a ManyToOne and a OneToMany.
     for fk in fks {
         let from = QualifiedName::new(&fk.from_schema, &fk.from_table);
         let to = QualifiedName::new(&fk.to_schema, &fk.to_table);
@@ -401,7 +216,6 @@ fn build_relationships(
             .map(|(a, b)| (a.clone(), b.clone()))
             .collect();
 
-        // FK table → referenced table (ManyToOne)
         rels.push(Relationship {
             from_table: from.clone(),
             to_table: to.clone(),
@@ -411,7 +225,6 @@ fn build_relationships(
             constraint_name: fk.constraint_name.clone(),
         });
 
-        // Referenced table → FK table (OneToMany), swap column pairs
         let reverse_pairs: Vec<(String, String)> = col_pairs
             .iter()
             .map(|(a, b)| (b.clone(), a.clone()))
@@ -426,7 +239,6 @@ fn build_relationships(
         });
     }
 
-    // Infer ManyToMany through join tables.
     rels.extend(infer_m2m(fks, tables));
 
     rels
@@ -457,7 +269,6 @@ fn infer_m2m(fks: &[RawForeignKey], tables: &HashMap<QualifiedName, Table>) -> V
             .flat_map(|fk| fk.from_columns.iter().map(String::as_str))
             .collect();
 
-        // Every column must be an FK column or a PK column.
         let is_join_table = table
             .columns
             .iter()

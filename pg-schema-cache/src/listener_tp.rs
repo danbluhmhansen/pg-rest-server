@@ -3,7 +3,9 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_postgres::NoTls;
 
-use crate::{build_schema_cache, SchemaCache, SchemaCacheError};
+use crate::error::SchemaCacheError;
+use crate::introspection_tp;
+use pg_schema_cache_types::SchemaCache;
 
 /// Establishes a dedicated PostgreSQL connection, executes `LISTEN` on the
 /// given channel, and rebuilds the [`SchemaCache`] whenever a notification
@@ -51,7 +53,7 @@ pub async fn start_schema_listener(
     while let Some(notification) = notify_rx.recv().await {
         if notification.channel() == channel_name {
             tracing::info!("Schema reload notification received");
-            match build_schema_cache(&client, &schemas).await {
+            match introspection_tp::build_schema_cache(&client, &schemas).await {
                 Ok(cache) => {
                     tx.send(Arc::new(cache)).ok();
                     tracing::info!("Schema cache reloaded");

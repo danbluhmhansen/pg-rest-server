@@ -10,7 +10,7 @@ use pg_query_engine::{
     ApiRequest, ConflictAction, CountOption, DeleteRequest, FilterNode, FunctionCall,
     InsertRequest, ReadRequest, SelectItem, SqlOutput, UpdateRequest,
 };
-use pg_schema_cache_resolute::{ReturnType, SchemaCache};
+use pg_schema_cache::{ReturnType, SchemaCache};
 use resolute::{Client, SharedPool};
 
 use crate::auth::{extract_jwt_claims, JwtClaims};
@@ -808,7 +808,7 @@ pub async fn handle_reload(State(state): State<Arc<AppState>>) -> Result<Respons
     // Use a one-off resolute Client for schema introspection.
     let client = Client::connect_from_str(&state.config.database.uri).await?;
     let cache =
-        pg_schema_cache_resolute::build_schema_cache(&client, &state.config.database.schemas)
+        pg_schema_cache::resolute::build_schema_cache(&client, &state.config.database.schemas)
             .await?;
 
     let tables = cache.tables.len();

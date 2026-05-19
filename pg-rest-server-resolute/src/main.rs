@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Loading schema cache...");
     let bootstrap = Client::connect_from_str(&config.database.uri).await?;
     let cache =
-        pg_schema_cache_resolute::build_schema_cache(&bootstrap, &config.database.schemas).await?;
+        pg_schema_cache::resolute::build_schema_cache(&bootstrap, &config.database.schemas).await?;
     drop(bootstrap);
     tracing::info!(
         "Schema cache loaded: {} tables, {} functions",
@@ -132,7 +132,7 @@ async fn schema_listener_loop(
     let mut backoff = std::time::Duration::from_secs(1);
     loop {
         let schemas = state.config.database.schemas.clone();
-        let result = pg_schema_cache_resolute::start_schema_listener(
+        let result = pg_schema_cache::resolute::start_schema_listener(
             &addr,
             &user,
             &password,

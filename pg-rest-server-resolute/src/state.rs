@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::watch;
 
 use crate::config::AppConfig;
-use pg_schema_cache_resolute::SchemaCache;
+use pg_schema_cache::SchemaCache;
 use resolute::SharedPool;
 
 pub struct AppState {

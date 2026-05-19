@@ -13,7 +13,7 @@ rust-version.workspace = true
 
 [dependencies]
 # Internal crates
-pg-schema-cache-tokio-postgres = { path = "../pg-schema-cache-tokio-postgres", version = "0.2.0" }
+pg-schema-cache = { path = "../pg-schema-cache", version = "0.2.0", features = ["tokio-postgres"] }
 pg-query-engine = { path = "../pg-query-engine", version = "0.2.0" }
 pg-wired = { workspace = true }
 pg-pool = { workspace = true }

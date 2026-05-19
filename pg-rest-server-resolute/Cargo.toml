@@ -13,7 +13,7 @@ rust-version.workspace = true
 
 [dependencies]
 # Internal crates, NO tokio-postgres
-pg-schema-cache-resolute = { path = "../pg-schema-cache-resolute", version = "0.2.0" }
+pg-schema-cache = { path = "../pg-schema-cache", version = "0.2.0", features = ["resolute"] }
 pg-query-engine = { path = "../pg-query-engine", version = "0.2.0" }
 pg-wired = { workspace = true }
 resolute = { workspace = true }
