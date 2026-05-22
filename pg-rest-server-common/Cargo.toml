@@ -25,3 +25,7 @@ jsonwebtoken = "9"
 
 # Query engine types (used by handler helpers)
 pg-query-engine = { path = "../pg-query-engine", version = "0.2.0" }
+
+# Middleware (router builder)
+tower = { version = "0.5", features = ["limit"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }

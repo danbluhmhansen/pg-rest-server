@@ -9,18 +9,13 @@ use std::sync::Arc;
 
 use axum::routing::{get, post};
 use axum::Router;
-use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::limit::RequestBodyLimitLayer;
-use tower_http::trace::TraceLayer;
 
 use handlers::*;
 use state::AppState;
 
 /// Build the Axum router with all routes and middleware.
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let cors = build_cors(&state.config.server.cors_origins);
-
-    let mut app = Router::new()
+    let app = Router::new()
         .route("/", get(handle_root))
         .route("/live", get(handle_live))
         .route("/ready", get(handle_ready))
@@ -36,36 +31,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 .delete(handle_delete),
         );
 
-    if std::env::var("PG_REST_LEAN").is_err() {
-        // Full middleware stack: body limits, tracing, CORS.
-        // These layers clone per-connection — adds overhead at high throughput.
-        app = app
-            .layer(RequestBodyLimitLayer::new(state.config.server.body_limit))
-            .layer(TraceLayer::new_for_http())
-            .layer(cors);
-    }
-
-    // Rate limiting (requests/sec, 0 = unlimited).
-    // Applied via ConcurrencyLimit as a simpler alternative that's Clone-compatible.
-    if state.config.server.rate_limit > 0 {
-        app = app.layer(tower::limit::ConcurrencyLimitLayer::new(
-            state.config.server.rate_limit as usize,
-        ));
-    }
-
-    app.with_state(state)
-}
-
-fn build_cors(origins: &[String]) -> CorsLayer {
-    if origins.is_empty() || (origins.len() == 1 && origins[0] == "*") {
-        return CorsLayer::permissive();
-    }
-
-    let allowed: Vec<axum::http::HeaderValue> =
-        origins.iter().filter_map(|o| o.parse().ok()).collect();
-
-    CorsLayer::new()
-        .allow_origin(AllowOrigin::list(allowed))
-        .allow_methods(tower_http::cors::Any)
-        .allow_headers(tower_http::cors::Any)
+    pg_rest_server_common::router::apply_server_middleware(app, &state.config.server)
+        .with_state(state)
 }
