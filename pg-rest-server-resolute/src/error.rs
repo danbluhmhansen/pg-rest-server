@@ -144,6 +144,18 @@ impl From<pg_schema_cache::SchemaCacheError> for ApiError {
     }
 }
 
+impl From<pg_rest_server_common::handlers::HandlerError> for ApiError {
+    fn from(e: pg_rest_server_common::handlers::HandlerError) -> Self {
+        match e {
+            pg_rest_server_common::handlers::HandlerError::BadRequest(msg) => Self::BadRequest(msg),
+            pg_rest_server_common::handlers::HandlerError::NotAcceptable(msg) => {
+                Self::NotAcceptable(msg)
+            }
+            pg_rest_server_common::handlers::HandlerError::Parse(e) => Self::Parse(e),
+        }
+    }
+}
+
 /// Drill into a [`resolute::TypedError`] looking for a server-reported
 /// `ErrorResponse`. Returns `None` for non-PG-server errors (timeouts, decode,
 /// pool, I/O, config).

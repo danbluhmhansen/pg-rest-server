@@ -1455,6 +1455,7 @@ version = "0.2.0"
 dependencies = [
  "axum",
  "jsonwebtoken",
+ "pg-query-engine",
  "pg-schema-cache-types",
  "serde",
  "serde_json",

@@ -142,3 +142,15 @@ impl From<pg_schema_cache::SchemaCacheError> for ApiError {
         Self::BadRequest(format!("schema cache error: {e}"))
     }
 }
+
+impl From<pg_rest_server_common::handlers::HandlerError> for ApiError {
+    fn from(e: pg_rest_server_common::handlers::HandlerError) -> Self {
+        match e {
+            pg_rest_server_common::handlers::HandlerError::BadRequest(msg) => Self::BadRequest(msg),
+            pg_rest_server_common::handlers::HandlerError::NotAcceptable(msg) => {
+                Self::NotAcceptable(msg)
+            }
+            pg_rest_server_common::handlers::HandlerError::Parse(e) => Self::Parse(e),
+        }
+    }
+}
