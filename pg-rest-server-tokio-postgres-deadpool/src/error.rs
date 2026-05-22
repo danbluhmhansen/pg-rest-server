@@ -1,5 +1,8 @@
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
+use pg_rest_server_common::error::{
+    database_error_json, database_error_status, format_database_error, DbErrorDetail,
+};
 
 #[derive(Debug)]
 pub enum ApiError {
@@ -10,7 +13,7 @@ pub enum ApiError {
     BadRequest(String),
     QueryEngine(pg_query_engine::QueryEngineError),
     Parse(pg_query_engine::ParseError),
-    Database(tokio_postgres::Error),
+    Database(Box<dyn DbErrorDetail>),
     NotAcceptable(String),
     Pool(String),
 }
@@ -26,18 +29,7 @@ impl std::fmt::Display for ApiError {
             Self::BadRequest(m) => write!(f, "{m}"),
             Self::QueryEngine(e) => write!(f, "{e}"),
             Self::Parse(e) => write!(f, "{e}"),
-            Self::Database(e) => {
-                if let Some(db_err) = e.as_db_error() {
-                    write!(
-                        f,
-                        "database error: {}: {}",
-                        db_err.code().code(),
-                        db_err.message()
-                    )
-                } else {
-                    write!(f, "database error: {e}")
-                }
-            }
+            Self::Database(e) => write!(f, "{}", format_database_error(e.as_ref())),
             Self::Pool(msg) => write!(f, "connection pool error: {msg}"),
         }
     }
@@ -59,40 +51,14 @@ impl IntoResponse for ApiError {
                 _ => (StatusCode::BAD_REQUEST, self.to_string()),
             },
             Self::Database(e) => {
-                let code = e.code();
-                let status = match code.map(|c| c.code()) {
-                    Some("42501") => StatusCode::UNAUTHORIZED, // insufficient privilege (PostgREST compat)
-                    Some("23505") => StatusCode::CONFLICT,     // unique violation
-                    Some("23503") => StatusCode::CONFLICT,     // FK violation
-                    Some("23502") => StatusCode::BAD_REQUEST,  // not null violation
-                    Some("23514") => StatusCode::BAD_REQUEST,  // check violation
-                    Some("42P01") => StatusCode::NOT_FOUND,    // undefined table
-                    Some("42883") => StatusCode::NOT_FOUND,    // undefined function
-                    Some(c) if c.starts_with("P0") => StatusCode::BAD_REQUEST, // user RAISE
-                    Some(c) if c.starts_with("23") => StatusCode::BAD_REQUEST, // integrity
-                    Some(c) if c.starts_with("22") => StatusCode::BAD_REQUEST, // data exception
-                    _ => StatusCode::INTERNAL_SERVER_ERROR,
-                };
+                let status = database_error_status(e.as_ref());
                 (status, self.to_string())
             }
             Self::Pool(_) => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
         };
 
-        // PostgREST-compatible error format.
         let body = if let Self::Database(e) = &self {
-            if let Some(db_err) = e.as_db_error() {
-                serde_json::json!({
-                    "code": db_err.code().code(),
-                    "message": db_err.message(),
-                    "details": db_err.detail(),
-                    "hint": db_err.hint(),
-                })
-            } else {
-                serde_json::json!({
-                    "code": status.as_str(),
-                    "message": message,
-                })
-            }
+            database_error_json(e.as_ref(), status)
         } else {
             let code = match &self {
                 Self::TableNotFound(_) | Self::FunctionNotFound(_) => "PGRST200",
@@ -133,7 +99,7 @@ impl From<pg_query_engine::ParseError> for ApiError {
 
 impl From<tokio_postgres::Error> for ApiError {
     fn from(e: tokio_postgres::Error) -> Self {
-        Self::Database(e)
+        Self::Database(Box::new(e))
     }
 }
 

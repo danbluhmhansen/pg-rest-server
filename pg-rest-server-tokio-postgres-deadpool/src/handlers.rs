@@ -605,7 +605,7 @@ pub async fn handle_reload(State(state): State<Arc<AppState>>) -> Result<Respons
     // Use a one-off tokio-postgres connection for schema introspection.
     let (client, conn) = tokio_postgres::connect(&state.config.database.uri, tokio_postgres::NoTls)
         .await
-        .map_err(ApiError::Database)?;
+        .map_err(|e| ApiError::Database(Box::new(e)))?;
     tokio::spawn(async move {
         conn.await.ok();
     });
