@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Mutex;
+
+use axum::http::{header, HeaderMap};
 
 #[derive(Debug, Clone)]
 pub struct JwtClaims {
@@ -50,4 +53,68 @@ impl JwtCache {
         }
         cache.insert(key, claims);
     }
+}
+
+// ---------------------------------------------------------------------------
+// JWT extraction
+// ---------------------------------------------------------------------------
+
+/// Errors that can occur during JWT extraction.
+#[derive(Debug)]
+pub enum AuthError {
+    Unauthorized(String),
+}
+
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unauthorized(msg) => write!(f, "unauthorized: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for AuthError {}
+
+/// Extract JWT claims from the Authorization header.
+/// Uses a cache to skip HMAC validation for repeated tokens.
+/// Returns `Ok(None)` for anonymous requests (no token).
+pub fn extract_jwt_claims(
+    headers: &HeaderMap,
+    jwt_cache: &JwtCache,
+    jwt_decoding_key: &jsonwebtoken::DecodingKey,
+    jwt_validation: &jsonwebtoken::Validation,
+    anon_role: &str,
+) -> Result<Option<JwtClaims>, AuthError> {
+    let auth_value = match headers.get(header::AUTHORIZATION) {
+        Some(v) => v,
+        None => return Ok(None),
+    };
+
+    let auth_str = auth_value
+        .to_str()
+        .map_err(|_| AuthError::Unauthorized("invalid authorization header".into()))?;
+
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| AuthError::Unauthorized("expected Bearer token".into()))?;
+
+    if let Some(claims) = jwt_cache.get(token) {
+        return Ok(Some(claims));
+    }
+
+    let data = jsonwebtoken::decode::<serde_json::Value>(token, jwt_decoding_key, jwt_validation)
+        .map_err(|e| AuthError::Unauthorized(e.to_string()))?;
+
+    let role = data
+        .claims
+        .get("role")
+        .and_then(|v| v.as_str())
+        .unwrap_or(anon_role)
+        .to_string();
+
+    let raw = serde_json::to_string(&data.claims).unwrap_or_default();
+
+    let claims = JwtClaims { role, raw };
+    jwt_cache.insert(token, claims.clone());
+    Ok(Some(claims))
 }
