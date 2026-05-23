@@ -2,8 +2,8 @@ use axum::http::HeaderMap;
 
 use pg_rest_server_common::auth::{extract_jwt_claims as common_extract, JwtClaims};
 
-use crate::error::ApiError;
 use crate::state::AppState;
+use crate::ApiError;
 
 /// Extract JWT claims from the Authorization header.
 /// Delegates to the shared implementation in `pg-rest-server-common`.

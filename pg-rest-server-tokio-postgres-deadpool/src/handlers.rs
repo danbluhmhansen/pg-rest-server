@@ -14,8 +14,8 @@ use pg_rest_server_common::handlers::*;
 use pg_schema_cache::{ReturnType, SchemaCache};
 
 use crate::auth::extract_jwt_claims;
-use crate::error::ApiError;
 use crate::state::AppState;
+use crate::ApiError;
 
 /// Bind `sql.params: Vec<String>` as text params for tokio-postgres.
 /// Each `&String` derefs to `&str`, which implements `ToSql` and is sent as text.

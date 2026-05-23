@@ -14,8 +14,8 @@ use pg_rest_server_common::handlers::*;
 use pg_schema_cache::{ReturnType, SchemaCache};
 
 use crate::auth::extract_jwt_claims;
-use crate::error::ApiError;
 use crate::state::AppState;
+use crate::ApiError;
 
 /// Execute via pg-wired: binary protocol pipelining.
 /// Auth path: BEGIN + SET LOCAL ROLE + set_config + parameterized query + COMMIT
@@ -35,8 +35,7 @@ async fn execute_wire(
         // Anon: use pre-computed setup SQL (no allocation).
         let rows = async_pool
             .exec_transaction(anon_setup_sql, &sql.sql, &param_refs, &param_oids)
-            .await
-            .map_err(crate::error::map_wire_error)?;
+            .await?;
         let json = rows
             .first()
             .and_then(|r| r.cell(0))
@@ -49,8 +48,7 @@ async fn execute_wire(
 
     let rows = async_pool
         .exec_transaction(&setup_sql, &sql.sql, &param_refs, &param_oids)
-        .await
-        .map_err(crate::error::map_wire_error)?;
+        .await?;
 
     let json = rows
         .first()
@@ -81,8 +79,7 @@ async fn execute_wire_with_count(
         let setup_sql = build_setup_sql(claims, anon_setup_sql);
         let rows = async_pool
             .exec_transaction(&setup_sql, &csql.sql, &cpr, &co)
-            .await
-            .map_err(crate::error::map_wire_error)?;
+            .await?;
         rows.first()
             .and_then(|r| r.cell(0))
             .and_then(|b| String::from_utf8_lossy(b).parse::<i64>().ok())
@@ -173,8 +170,7 @@ pub async fn handle_read(
         let rows = state
             .async_pool
             .exec_transaction(&setup_sql, &sql.sql, &param_refs, &param_oids)
-            .await
-            .map_err(crate::error::map_wire_error)?;
+            .await?;
 
         // EXPLAIN FORMAT JSON returns a single text row.
         let plan_text = rows

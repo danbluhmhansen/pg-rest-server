@@ -77,6 +77,139 @@ pub fn database_error_json(
 }
 
 // ---------------------------------------------------------------------------
+// Shared API error type used by all pg-rest-server backends
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+pub enum ApiError {
+    TableNotFound(String),
+    FunctionNotFound(String),
+    MethodNotAllowed,
+    Unauthorized(String),
+    BadRequest(String),
+    QueryEngine(pg_query_engine::QueryEngineError),
+    Parse(pg_query_engine::ParseError),
+    Database(Box<dyn DbErrorDetail>),
+    NotAcceptable(String),
+    Pool(String),
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotAcceptable(m) => write!(f, "not acceptable: {m}"),
+            Self::TableNotFound(t) => write!(f, "table or view not found: {t}"),
+            Self::FunctionNotFound(t) => write!(f, "function not found: {t}"),
+            Self::MethodNotAllowed => write!(f, "method not allowed"),
+            Self::Unauthorized(m) => write!(f, "unauthorized: {m}"),
+            Self::BadRequest(m) => write!(f, "{m}"),
+            Self::QueryEngine(e) => write!(f, "{e}"),
+            Self::Parse(e) => write!(f, "{e}"),
+            Self::Database(e) => write!(f, "{}", format_database_error(e.as_ref())),
+            Self::Pool(msg) => write!(f, "connection pool error: {msg}"),
+        }
+    }
+}
+
+impl axum::response::IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let (status, message) = match &self {
+            Self::TableNotFound(_) => (axum::http::StatusCode::NOT_FOUND, self.to_string()),
+            Self::FunctionNotFound(_) => (axum::http::StatusCode::NOT_FOUND, self.to_string()),
+            Self::MethodNotAllowed => {
+                (axum::http::StatusCode::METHOD_NOT_ALLOWED, self.to_string())
+            }
+            Self::NotAcceptable(_) => (axum::http::StatusCode::NOT_ACCEPTABLE, self.to_string()),
+            Self::Unauthorized(_) => (axum::http::StatusCode::UNAUTHORIZED, self.to_string()),
+            Self::BadRequest(_) | Self::Parse(_) => {
+                (axum::http::StatusCode::BAD_REQUEST, self.to_string())
+            }
+            Self::QueryEngine(e) => match e {
+                pg_query_engine::QueryEngineError::TableNotFound(_) => {
+                    (axum::http::StatusCode::NOT_FOUND, self.to_string())
+                }
+                _ => (axum::http::StatusCode::BAD_REQUEST, self.to_string()),
+            },
+            Self::Database(e) => {
+                let status = database_error_status(e.as_ref());
+                (status, self.to_string())
+            }
+            Self::Pool(_) => (
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                self.to_string(),
+            ),
+        };
+
+        let body = if let Self::Database(e) = &self {
+            database_error_json(e.as_ref(), status)
+        } else {
+            let code = match &self {
+                Self::TableNotFound(_) | Self::FunctionNotFound(_) => "PGRST200",
+                Self::MethodNotAllowed => "PGRST105",
+                Self::NotAcceptable(_) => "PGRST107",
+                Self::Unauthorized(_) => "PGRST301",
+                Self::BadRequest(_) | Self::Parse(_) => "PGRST100",
+                Self::QueryEngine(_) => "PGRST100",
+                Self::Pool(_) => "PGRST003",
+                Self::Database(_) => unreachable!(),
+            };
+            serde_json::json!({
+                "code": code,
+                "message": message,
+            })
+        };
+
+        (
+            status,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            body.to_string(),
+        )
+            .into_response()
+    }
+}
+
+impl From<pg_query_engine::QueryEngineError> for ApiError {
+    fn from(e: pg_query_engine::QueryEngineError) -> Self {
+        Self::QueryEngine(e)
+    }
+}
+
+impl From<pg_query_engine::ParseError> for ApiError {
+    fn from(e: pg_query_engine::ParseError) -> Self {
+        Self::Parse(e)
+    }
+}
+
+impl From<crate::handlers::HandlerError> for ApiError {
+    fn from(e: crate::handlers::HandlerError) -> Self {
+        match e {
+            crate::handlers::HandlerError::BadRequest(msg) => Self::BadRequest(msg),
+            crate::handlers::HandlerError::NotAcceptable(msg) => Self::NotAcceptable(msg),
+            crate::handlers::HandlerError::Parse(e) => Self::Parse(e),
+        }
+    }
+}
+
+/// Blanket conversion: any type implementing `DbErrorDetail` can be converted
+/// to `ApiError`. Pool-level errors become `ApiError::Pool`, others become
+/// `ApiError::Database`.
+impl<T: DbErrorDetail + 'static> From<T> for ApiError {
+    fn from(e: T) -> Self {
+        if e.is_pool_error() {
+            Self::Pool(e.to_string())
+        } else {
+            Self::Database(Box::new(e))
+        }
+    }
+}
+
+impl From<pg_schema_cache::SchemaCacheError> for ApiError {
+    fn from(e: pg_schema_cache::SchemaCacheError) -> Self {
+        Self::BadRequest(format!("schema cache error: {e}"))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Implementation for tokio-postgres
 // ---------------------------------------------------------------------------
 
@@ -147,5 +280,44 @@ fn pg_error(e: &resolute::TypedError) -> Option<&pg_wired::PgError> {
             }
             _ => return None,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Implementation for pg-wired (standalone, without resolute)
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "pg-wired")]
+impl DbErrorDetail for pg_wired::PgWireError {
+    fn code(&self) -> Option<&str> {
+        match self {
+            pg_wired::PgWireError::Pg(ref e) => Some(&e.code),
+            _ => None,
+        }
+    }
+
+    fn message(&self) -> Option<&str> {
+        match self {
+            pg_wired::PgWireError::Pg(ref e) => Some(&e.message),
+            _ => None,
+        }
+    }
+
+    fn detail(&self) -> Option<&str> {
+        match self {
+            pg_wired::PgWireError::Pg(ref e) => e.detail.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn hint(&self) -> Option<&str> {
+        match self {
+            pg_wired::PgWireError::Pg(ref e) => e.hint.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn is_pool_error(&self) -> bool {
+        !matches!(self, pg_wired::PgWireError::Pg(_))
     }
 }

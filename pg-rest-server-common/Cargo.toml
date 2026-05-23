@@ -30,6 +30,9 @@ pg-query-engine = { path = "../pg-query-engine", version = "0.2.0" }
 tower = { version = "0.5", features = ["limit"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }
 
+# Schema cache errors (for ApiError conversion)
+pg-schema-cache = { path = "../pg-schema-cache", version = "0.2.0" }
+
 # Optional DB driver error types (for DbErrorDetail implementations)
 resolute = { workspace = true, optional = true }
 pg-wired = { workspace = true, optional = true }
@@ -38,3 +41,4 @@ tokio-postgres = { version = "0.7", optional = true }
 [features]
 resolute = ["dep:resolute", "dep:pg-wired"]
 tokio-postgres = ["dep:tokio-postgres"]
+pg-wired = ["dep:pg-wired"]

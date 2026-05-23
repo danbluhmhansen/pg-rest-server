@@ -1,7 +1,8 @@
 pub mod auth;
-pub mod error;
 pub mod handlers;
 pub mod state;
+
+pub use pg_rest_server_common::error::ApiError;
 
 use std::sync::Arc;
 

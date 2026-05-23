@@ -15,8 +15,8 @@ use pg_schema_cache::{ReturnType, SchemaCache};
 use resolute::{Client, SharedPool};
 
 use crate::auth::extract_jwt_claims;
-use crate::error::ApiError;
 use crate::state::AppState;
+use crate::ApiError;
 
 /// Execute the request as a single pipelined batched transaction.
 /// Returns the (JSON body, optional count) tuple.

@@ -1456,6 +1456,7 @@ dependencies = [
  "axum",
  "jsonwebtoken",
  "pg-query-engine",
+ "pg-schema-cache",
  "pg-schema-cache-types",
  "pg-wired",
  "resolute",
