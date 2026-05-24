@@ -8,6 +8,7 @@ members = [
   "pg-rest-server-tokio-postgres-deadpool",
   "pg-rest-server-resolute",
   "test/compat",
+  "test/integration",
 ]
 resolver = "2"
 

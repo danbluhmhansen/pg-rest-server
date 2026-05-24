@@ -47,6 +47,4 @@ default = []
 tls = ["pg-wired/tls"]
 
 [dev-dependencies]
-tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
-hyper = "1"
+pg-rest-server-test = { path = "../test/integration" }

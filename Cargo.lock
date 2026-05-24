@@ -1475,11 +1475,10 @@ version = "0.2.0"
 dependencies = [
  "axum",
  "clap",
- "http-body-util",
- "hyper",
  "jsonwebtoken",
  "pg-query-engine",
  "pg-rest-server-common",
+ "pg-rest-server-test",
  "pg-schema-cache",
  "pg-wired",
  "resolute",
@@ -1494,17 +1493,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "pg-rest-server-test"
+version = "0.2.0"
+dependencies = [
+ "axum",
+ "http-body-util",
+ "jsonwebtoken",
+ "serde_json",
+ "tower",
+]
+
+[[package]]
 name = "pg-rest-server-tokio-postgres-deadpool"
 version = "0.2.0"
 dependencies = [
  "axum",
  "clap",
  "deadpool-postgres",
- "http-body-util",
- "hyper",
  "jsonwebtoken",
  "pg-query-engine",
  "pg-rest-server-common",
+ "pg-rest-server-test",
  "pg-schema-cache",
  "rustls",
  "serde",
@@ -1526,12 +1535,11 @@ version = "0.2.0"
 dependencies = [
  "axum",
  "clap",
- "http-body-util",
- "hyper",
  "jsonwebtoken",
  "pg-pool",
  "pg-query-engine",
  "pg-rest-server-common",
+ "pg-rest-server-test",
  "pg-schema-cache",
  "pg-wired",
  "rustls",

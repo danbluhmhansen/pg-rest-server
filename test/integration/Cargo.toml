@@ -1,0 +1,16 @@
+[package]
+name = "pg-rest-server-test"
+description = "Shared integration test helpers and test suite for all pg-rest-server backends."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+axum = "0.8"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+jsonwebtoken = "9"
+serde_json = "1"

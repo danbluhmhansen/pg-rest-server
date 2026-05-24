@@ -53,6 +53,4 @@ default = []
 tls = ["tokio-postgres-rustls", "rustls", "webpki-roots"]
 
 [dev-dependencies]
-tower = { version = "0.5", features = ["util"] }
-http-body-util = "0.1"
-hyper = "1"
+pg-rest-server-test = { path = "../test/integration" }
