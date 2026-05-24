@@ -1469,6 +1469,7 @@ name = "pg-rest-server-common"
 version = "0.2.0"
 dependencies = [
  "axum",
+ "base64",
  "jsonwebtoken",
  "pg-query-engine",
  "pg-schema-cache",

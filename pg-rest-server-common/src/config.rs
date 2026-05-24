@@ -10,7 +10,8 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
     #[serde(default)]
     pub server: ServerConfig,
-    pub jwt: JwtConfig,
+    #[serde(alias = "jwt")]
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,10 +46,65 @@ pub struct ServerConfig {
     pub rate_limit: u64,
 }
 
+/// Authentication configuration — mutually exclusive variants enforced at parse time.
+///
+/// Both `[jwt]` and `[auth]` are valid TOML section names regardless of variant.
+///
+/// ## HMAC secret (or inline JWKS / URL-in-secret auto-detection)
+/// ```toml
+/// [jwt]
+/// secret = "my-hmac-secret"
+/// ```
+///
+/// ## Explicit JWKS URL
+/// ```toml
+/// [auth]
+/// jwks_url = "https://example.com/.well-known/jwks.json"
+/// ```
+///
+/// ## OIDC Token Introspection (RFC 7662)
+/// ```toml
+/// [auth]
+/// introspection = { url = "...", client_id = "...", client_secret = "..." }
+/// ```
 #[derive(Debug, Deserialize)]
-pub struct JwtConfig {
-    pub secret: Option<String>,
-    pub jwks_url: Option<String>,
+#[serde(untagged)]
+pub enum AuthConfig {
+    /// OIDC Token Introspection (RFC 7662).
+    Introspection(IntrospectionAuth),
+    /// Explicit JWKS URL.
+    JwksUrl(JwksUrlAuth),
+    /// HMAC secret (or inline JWKS / URL auto-detected from value).
+    Secret(SecretAuth),
+}
+
+/// `introspection` field only — rejects any unknown fields.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IntrospectionAuth {
+    pub introspection: IntrospectionConfig,
+}
+
+/// `jwks_url` field only — rejects any unknown fields.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JwksUrlAuth {
+    pub jwks_url: String,
+}
+
+/// `secret` field only — rejects any unknown fields.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecretAuth {
+    pub secret: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IntrospectionConfig {
+    pub url: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub cache_ttl: Option<u64>,
 }
 
 impl Default for ServerConfig {

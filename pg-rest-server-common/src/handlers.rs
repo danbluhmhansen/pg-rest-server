@@ -456,7 +456,7 @@ pub async fn handle_read<B: Backend>(
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let params = parse_query_pairs(raw_query.as_deref().unwrap_or(""));
-    let claims = extract_jwt_claims_for_state::<B>(&headers, &state)?;
+    let claims = extract_jwt_claims_for_state::<B>(&headers, &state).await?;
     let cache: Arc<SchemaCache> = state.schema_cache.borrow().clone();
     let schemas = resolve_schemas(&headers, &state.config.database.schemas)?;
 
@@ -617,7 +617,7 @@ pub async fn handle_insert<B: Backend>(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, ApiError> {
-    let claims = extract_jwt_claims_for_state::<B>(&headers, &state)?;
+    let claims = extract_jwt_claims_for_state::<B>(&headers, &state).await?;
     let cache: Arc<SchemaCache> = state.schema_cache.borrow().clone();
     let schemas = &state.config.database.schemas;
     let prefs = parse_prefer(&headers);
@@ -705,7 +705,7 @@ pub async fn handle_update<B: Backend>(
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Response, ApiError> {
-    let claims = extract_jwt_claims_for_state::<B>(&headers, &state)?;
+    let claims = extract_jwt_claims_for_state::<B>(&headers, &state).await?;
     let cache: Arc<SchemaCache> = state.schema_cache.borrow().clone();
     let schemas = &state.config.database.schemas;
     let prefs = parse_prefer(&headers);
@@ -755,7 +755,7 @@ pub async fn handle_delete<B: Backend>(
     Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
-    let claims = extract_jwt_claims_for_state::<B>(&headers, &state)?;
+    let claims = extract_jwt_claims_for_state::<B>(&headers, &state).await?;
     let cache: Arc<SchemaCache> = state.schema_cache.borrow().clone();
     let schemas = &state.config.database.schemas;
     let prefs = parse_prefer(&headers);
@@ -800,7 +800,7 @@ pub async fn handle_rpc<B: Backend>(
     headers: HeaderMap,
     body: Option<Json<serde_json::Value>>,
 ) -> Result<Response, ApiError> {
-    let claims = extract_jwt_claims_for_state::<B>(&headers, &state)?;
+    let claims = extract_jwt_claims_for_state::<B>(&headers, &state).await?;
     let cache: Arc<SchemaCache> = state.schema_cache.borrow().clone();
     let schemas = &state.config.database.schemas;
 

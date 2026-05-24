@@ -24,8 +24,11 @@ tokio = { version = "1", features = ["sync", "macros", "signal", "time", "rt"] }
 # JWT auth
 jsonwebtoken = "9"
 
-# HTTP client for JWKS URL fetching
+# HTTP client for JWKS URL fetching + OIDC introspection
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+# Base64 encoding for OIDC Basic auth header
+base64 = "0.22"
 
 # Query engine types (used by handler helpers)
 pg-query-engine = { path = "../pg-query-engine", version = "0.2.0" }

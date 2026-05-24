@@ -25,10 +25,11 @@ async fn setup() -> axum::Router {
             prepared_statements: true,
         },
         server: pg_rest_server_common::config::ServerConfig::default(),
-        jwt: pg_rest_server_common::config::JwtConfig {
-            secret: Some(suite::JWT_SECRET.to_string()),
-            jwks_url: None,
-        },
+        auth: pg_rest_server_common::config::AuthConfig::Secret(
+            pg_rest_server_common::config::SecretAuth {
+                secret: suite::JWT_SECRET.to_string(),
+            },
+        ),
     };
 
     let (client, conn) = tokio_postgres::connect(&config.database.uri, tokio_postgres::NoTls)
@@ -64,7 +65,7 @@ async fn setup() -> axum::Router {
         schema_cache_tx: cache_tx,
         openapi_cache: tokio::sync::RwLock::new(("".into(), "".into())),
         config,
-        jwt_key_source: pg_rest_server_common::auth::JwtKeySource::from_secret(suite::JWT_SECRET),
+        auth_source: pg_rest_server_common::auth::AuthSource::from_secret(suite::JWT_SECRET),
         jwt_cache: pg_rest_server_common::auth::JwtCache::new(),
         anon_role_quoted: "\"web_anon\"".to_string(),
         anon_setup_sql: "BEGIN; SET LOCAL ROLE \"web_anon\"".to_string(),
