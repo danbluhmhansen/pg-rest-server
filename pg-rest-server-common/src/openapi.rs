@@ -34,7 +34,7 @@ pub fn generate_v2(cache: &SchemaCache, config: &AppConfig) -> Value {
             "description": "Automatic REST API for PostgreSQL",
             "version": "0.1.0"
         },
-        "host": format!("{}:{}", config.server.host, config.server.port),
+        "host": config.server.bind_addr(),
         "basePath": "/",
         "schemes": ["http"],
         "consumes": ["application/json", "text/csv"],
@@ -72,7 +72,7 @@ pub fn generate_v3(cache: &SchemaCache, config: &AppConfig) -> Value {
             "version": "0.1.0"
         },
         "servers": [
-            { "url": format!("http://{}:{}", config.server.host, config.server.port) }
+            { "url": format!("http://{}", config.server.bind_addr()) }
         ],
         "paths": Value::Object(paths),
         "components": {

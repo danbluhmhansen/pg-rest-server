@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::Path,
+};
 
 use serde::Deserialize;
 
@@ -25,7 +28,7 @@ pub struct DatabaseConfig {
 #[derive(Debug, Deserialize)]
 pub struct ServerConfig {
     #[serde(default = "default_host")]
-    pub host: String,
+    pub host: IpAddr,
     #[serde(default = "default_port")]
     pub port: u16,
     /// "text" (default) or "json" for structured JSON logging.
@@ -60,8 +63,8 @@ impl Default for ServerConfig {
     }
 }
 
-fn default_host() -> String {
-    "0.0.0.0".to_string()
+fn default_host() -> IpAddr {
+    Ipv4Addr::new(0, 0, 0, 0).into()
 }
 fn default_port() -> u16 {
     3000
@@ -84,5 +87,11 @@ impl AppConfig {
         let content = std::fs::read_to_string(path)?;
         let config: AppConfig = toml::from_str(&content)?;
         Ok(config)
+    }
+}
+
+impl ServerConfig {
+    pub fn bind_addr(&self) -> SocketAddr {
+        (self.host, self.port).into()
     }
 }
