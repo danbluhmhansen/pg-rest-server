@@ -26,7 +26,8 @@ async fn setup() -> axum::Router {
         },
         server: pg_rest_server_common::config::ServerConfig::default(),
         jwt: pg_rest_server_common::config::JwtConfig {
-            secret: suite::JWT_SECRET.to_string(),
+            secret: Some(suite::JWT_SECRET.to_string()),
+            jwks_url: None,
         },
     };
 
@@ -43,10 +44,6 @@ async fn setup() -> axum::Router {
     drop(client);
 
     let (cache_tx, cache_rx) = watch::channel(Arc::new(cache));
-
-    let jwt_decoding_key = jsonwebtoken::DecodingKey::from_secret(config.jwt.secret.as_bytes());
-    let mut jwt_validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
-    jwt_validation.required_spec_claims = Default::default();
 
     let pg_cfg: tokio_postgres::Config = config.database.uri.parse().unwrap();
     let mgr = deadpool_postgres::Manager::from_config(
@@ -67,8 +64,7 @@ async fn setup() -> axum::Router {
         schema_cache_tx: cache_tx,
         openapi_cache: tokio::sync::RwLock::new(("".into(), "".into())),
         config,
-        jwt_decoding_key,
-        jwt_validation,
+        jwt_key_source: pg_rest_server_common::auth::JwtKeySource::from_secret(suite::JWT_SECRET),
         jwt_cache: pg_rest_server_common::auth::JwtCache::new(),
         anon_role_quoted: "\"web_anon\"".to_string(),
         anon_setup_sql: "BEGIN; SET LOCAL ROLE \"web_anon\"".to_string(),

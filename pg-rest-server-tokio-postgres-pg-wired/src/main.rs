@@ -63,15 +63,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. Build application state + router.
     let bind_addr = config.server.bind_addr();
-    let state = Arc::new(AppState::new(
-        PgWiredBackend {
-            conn_pool,
-            async_pool,
-        },
-        config,
-        cache_rx,
-        cache_tx,
-    ));
+    let state = Arc::new(
+        AppState::new(
+            PgWiredBackend {
+                conn_pool,
+                async_pool,
+            },
+            config,
+            cache_rx,
+            cache_tx,
+        )
+        .await?,
+    );
 
     state.init_openapi_cache().await;
 

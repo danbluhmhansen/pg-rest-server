@@ -47,7 +47,8 @@ pub struct ServerConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct JwtConfig {
-    pub secret: String,
+    pub secret: Option<String>,
+    pub jwks_url: Option<String>,
 }
 
 impl Default for ServerConfig {

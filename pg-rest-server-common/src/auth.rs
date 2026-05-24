@@ -56,6 +56,71 @@ impl JwtCache {
 }
 
 // ---------------------------------------------------------------------------
+// JWT key source: how the server resolves keys for verification
+// ---------------------------------------------------------------------------
+
+/// Determines how JWT verification keys are obtained.
+pub enum JwtKeySource {
+    /// Single HMAC secret (HS256/HS384/HS512 symmetric key).
+    Secret {
+        decoding_key: jsonwebtoken::DecodingKey,
+        validation: Box<jsonwebtoken::Validation>,
+    },
+    /// JWKS key set (supports RSA, EC, EdDSA, and symmetric keys).
+    Jwks { keys: Vec<jsonwebtoken::jwk::Jwk> },
+}
+
+impl JwtKeySource {
+    /// Create a `Secret` variant from an HMAC secret string.
+    /// Defaults to HS256 with no required spec claims.
+    pub fn from_secret(secret: &str) -> Self {
+        let decoding_key = jsonwebtoken::DecodingKey::from_secret(secret.as_bytes());
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+        validation.required_spec_claims = Default::default();
+        Self::Secret {
+            decoding_key,
+            validation: Box::new(validation),
+        }
+    }
+
+    /// Parse inline JWKS JSON (`{"keys": [...]}`) into a `Jwks` variant.
+    pub fn from_jwks_json(jwks_json: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        #[derive(serde::Deserialize)]
+        struct JwksSet {
+            keys: Vec<jsonwebtoken::jwk::Jwk>,
+        }
+        let set: JwksSet = serde_json::from_str(jwks_json)?;
+        if set.keys.is_empty() {
+            return Err("JWKS must contain at least one key".into());
+        }
+        Ok(Self::Jwks { keys: set.keys })
+    }
+
+    /// Fetch a JWKS from a URL and parse it into a `Jwks` variant.
+    pub async fn from_jwks_url(url: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let resp = reqwest::get(url).await?;
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(format!("JWKS URL returned {status}").into());
+        }
+        let body = resp.text().await?;
+        Self::from_jwks_json(&body)
+    }
+}
+
+impl fmt::Debug for JwtKeySource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Secret { .. } => f.debug_struct("Secret").finish_non_exhaustive(),
+            Self::Jwks { keys } => f
+                .debug_struct("Jwks")
+                .field("key_count", &keys.len())
+                .finish_non_exhaustive(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // JWT extraction
 // ---------------------------------------------------------------------------
 
@@ -75,14 +140,38 @@ impl fmt::Display for AuthError {
 
 impl std::error::Error for AuthError {}
 
+/// Determine the [`jsonwebtoken::Algorithm`] from a JWK.
+///
+/// Prefers the JWK's `key_algorithm` field. Falls back to inferring from the
+/// key type:
+/// - RSA → RS256
+/// - EC → ES256
+/// - oct (symmetric) → HS256
+/// - OKP → EdDSA
+fn algorithm_from_jwk(jwk: &jsonwebtoken::jwk::Jwk) -> Result<jsonwebtoken::Algorithm, AuthError> {
+    use jsonwebtoken::jwk::AlgorithmParameters;
+
+    if let Some(ref key_alg) = jwk.common.key_algorithm {
+        let alg_str = key_alg.to_string();
+        return alg_str
+            .parse::<jsonwebtoken::Algorithm>()
+            .map_err(|_| AuthError::Unauthorized(format!("unsupported key algorithm: {alg_str}")));
+    }
+    match jwk.algorithm {
+        AlgorithmParameters::RSA(_) => Ok(jsonwebtoken::Algorithm::RS256),
+        AlgorithmParameters::EllipticCurve(_) => Ok(jsonwebtoken::Algorithm::ES256),
+        AlgorithmParameters::OctetKey(_) => Ok(jsonwebtoken::Algorithm::HS256),
+        AlgorithmParameters::OctetKeyPair(_) => Ok(jsonwebtoken::Algorithm::EdDSA),
+    }
+}
+
 /// Extract JWT claims from the Authorization header.
 /// Uses a cache to skip HMAC validation for repeated tokens.
 /// Returns `Ok(None)` for anonymous requests (no token).
 pub fn extract_jwt_claims(
     headers: &HeaderMap,
     jwt_cache: &JwtCache,
-    jwt_decoding_key: &jsonwebtoken::DecodingKey,
-    jwt_validation: &jsonwebtoken::Validation,
+    jwt_key_source: &JwtKeySource,
     anon_role: &str,
 ) -> Result<Option<JwtClaims>, AuthError> {
     let auth_value = match headers.get(header::AUTHORIZATION) {
@@ -102,8 +191,38 @@ pub fn extract_jwt_claims(
         return Ok(Some(claims));
     }
 
-    let data = jsonwebtoken::decode::<serde_json::Value>(token, jwt_decoding_key, jwt_validation)
-        .map_err(|e| AuthError::Unauthorized(e.to_string()))?;
+    let data = match jwt_key_source {
+        JwtKeySource::Secret {
+            decoding_key,
+            validation,
+        } => jsonwebtoken::decode::<serde_json::Value>(token, decoding_key, validation)
+            .map_err(|e| AuthError::Unauthorized(e.to_string()))?,
+
+        JwtKeySource::Jwks { keys } => {
+            let header = jsonwebtoken::decode_header(token)
+                .map_err(|e| AuthError::Unauthorized(e.to_string()))?;
+
+            let kid = header
+                .kid
+                .as_ref()
+                .ok_or_else(|| AuthError::Unauthorized("missing kid in JWT header".into()))?;
+
+            let jwk = keys
+                .iter()
+                .find(|k| k.common.key_id.as_deref() == Some(kid))
+                .ok_or_else(|| AuthError::Unauthorized(format!("no JWK found for kid: {kid}")))?;
+
+            let decoding_key = jsonwebtoken::DecodingKey::from_jwk(jwk)
+                .map_err(|e| AuthError::Unauthorized(e.to_string()))?;
+
+            let alg = algorithm_from_jwk(jwk)?;
+            let mut validation = jsonwebtoken::Validation::new(alg);
+            validation.required_spec_claims = Default::default();
+
+            jsonwebtoken::decode::<serde_json::Value>(token, &decoding_key, &validation)
+                .map_err(|e| AuthError::Unauthorized(e.to_string()))?
+        }
+    };
 
     let role = data
         .claims
@@ -127,8 +246,7 @@ pub fn extract_jwt_claims_for_state<B: crate::backend::Backend>(
     extract_jwt_claims(
         headers,
         &state.jwt_cache,
-        &state.jwt_decoding_key,
-        &state.jwt_validation,
+        &state.jwt_key_source,
         &state.config.database.anon_role,
     )
     .map_err(|e| crate::error::ApiError::Unauthorized(e.to_string()))
