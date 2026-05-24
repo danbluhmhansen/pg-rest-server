@@ -1462,6 +1462,7 @@ dependencies = [
  "resolute",
  "serde",
  "serde_json",
+ "tokio",
  "tokio-postgres",
  "toml",
  "tower",

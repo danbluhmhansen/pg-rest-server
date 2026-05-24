@@ -118,3 +118,18 @@ pub fn extract_jwt_claims(
     jwt_cache.insert(token, claims.clone());
     Ok(Some(claims))
 }
+
+/// Convenience wrapper: extract JWT claims from an `AppState` for any backend.
+pub fn extract_jwt_claims_for_state<B: crate::backend::Backend>(
+    headers: &HeaderMap,
+    state: &crate::state::AppState<B>,
+) -> Result<Option<JwtClaims>, crate::error::ApiError> {
+    extract_jwt_claims(
+        headers,
+        &state.jwt_cache,
+        &state.jwt_decoding_key,
+        &state.jwt_validation,
+        &state.config.database.anon_role,
+    )
+    .map_err(|e| crate::error::ApiError::Unauthorized(e.to_string()))
+}

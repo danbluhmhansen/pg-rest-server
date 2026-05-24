@@ -15,7 +15,8 @@ use tokio::sync::watch;
 use tower::ServiceExt; // for oneshot
 
 use pg_rest_server_common::config::AppConfig;
-use pg_rest_server_tokio_postgres_pg_wired::state::AppState;
+use pg_rest_server_common::state::AppState;
+use pg_rest_server_tokio_postgres_pg_wired::backend::PgWiredBackend;
 
 const DB_URI: &str = "postgres://authenticator:authenticator@localhost:54322/postgrest_test";
 const JWT_SECRET: &str = "reallyreallyreallyreallyverysafe";
@@ -83,8 +84,10 @@ async fn setup() -> axum::Router {
     .unwrap();
 
     let state = Arc::new(AppState {
-        conn_pool,
-        async_pool,
+        backend: PgWiredBackend {
+            conn_pool,
+            async_pool,
+        },
         schema_cache: cache_rx,
         schema_cache_tx: cache_tx,
         openapi_cache: tokio::sync::RwLock::new(("".into(), "".into())),
@@ -92,6 +95,7 @@ async fn setup() -> axum::Router {
         jwt_decoding_key,
         jwt_validation,
         jwt_cache: pg_rest_server_common::auth::JwtCache::new(),
+        anon_role_quoted: "\"web_anon\"".to_string(),
         anon_setup_sql: "BEGIN; SET LOCAL ROLE \"web_anon\"".to_string(),
     });
 

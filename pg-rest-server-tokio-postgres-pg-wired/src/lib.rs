@@ -1,33 +1,39 @@
-pub mod auth;
+pub mod backend;
 pub mod handlers;
-pub mod state;
 
 pub use pg_rest_server_common::error::ApiError;
+pub use pg_rest_server_common::handlers::{
+    handle_delete, handle_insert, handle_live, handle_metrics, handle_read, handle_ready,
+    handle_root, handle_rpc, handle_update,
+};
 
 use std::sync::Arc;
 
 use axum::routing::{get, post};
 use axum::Router;
 
-use handlers::*;
-use state::AppState;
+use crate::backend::PgWiredBackend;
+use crate::handlers::{handle_reload, handle_ws};
+use pg_rest_server_common::state::AppState;
 
-/// Build the Axum router with all routes and middleware.
-pub fn build_router(state: Arc<AppState>) -> Router {
+pub fn build_router(state: Arc<AppState<PgWiredBackend>>) -> Router {
     let app = Router::new()
-        .route("/", get(handle_root))
+        .route("/", get(handle_root::<PgWiredBackend>))
         .route("/live", get(handle_live))
-        .route("/ready", get(handle_ready))
-        .route("/metrics", get(handle_metrics))
+        .route("/ready", get(handle_ready::<PgWiredBackend>))
+        .route("/metrics", get(handle_metrics::<PgWiredBackend>))
         .route("/reload", post(handle_reload))
         .route("/ws", get(handle_ws))
-        .route("/rpc/{function}", get(handle_rpc).post(handle_rpc))
+        .route(
+            "/rpc/{function}",
+            get(handle_rpc::<PgWiredBackend>).post(handle_rpc::<PgWiredBackend>),
+        )
         .route(
             "/{table}",
-            get(handle_read)
-                .post(handle_insert)
-                .patch(handle_update)
-                .delete(handle_delete),
+            get(handle_read::<PgWiredBackend>)
+                .post(handle_insert::<PgWiredBackend>)
+                .patch(handle_update::<PgWiredBackend>)
+                .delete(handle_delete::<PgWiredBackend>),
         );
 
     pg_rest_server_common::router::apply_server_middleware(app, &state.config.server)

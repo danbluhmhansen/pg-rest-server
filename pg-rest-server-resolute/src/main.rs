@@ -5,7 +5,8 @@ use clap::Parser;
 use tokio::sync::watch;
 
 use pg_rest_server_common::config::AppConfig;
-use pg_rest_server_resolute::state::AppState;
+use pg_rest_server_common::state::AppState;
+use pg_rest_server_resolute::backend::ResoluteBackend;
 use resolute::{Client, SharedPool};
 
 #[derive(Parser)]
@@ -82,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let anon_role_quoted = format!("\"{}\"", config.database.anon_role.replace('"', "\"\""));
     let anon_setup_sql = format!("BEGIN; SET LOCAL ROLE {anon_role_quoted}");
     let state = Arc::new(AppState {
-        pool,
+        backend: ResoluteBackend { pool },
         schema_cache: cache_rx,
         schema_cache_tx: cache_tx,
         openapi_cache: tokio::sync::RwLock::new(("".into(), "".into())),
@@ -125,7 +126,7 @@ async fn schema_listener_loop(
     user: String,
     password: String,
     database: String,
-    state: Arc<AppState>,
+    state: Arc<AppState<ResoluteBackend>>,
 ) {
     let mut backoff = std::time::Duration::from_secs(1);
     loop {
@@ -159,7 +160,6 @@ async fn shutdown_signal() {
 }
 
 /// Parse a postgres:// URI into the components SharedPool::connect expects.
-/// Falls back to the `parse_connection_string` helper resolute uses internally.
 fn parse_pg_uri_for_pool(uri: &str) -> Option<(String, String, String, u16, String)> {
     let rest = uri
         .strip_prefix("postgres://")
