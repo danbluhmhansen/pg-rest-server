@@ -1,10 +1,9 @@
 pub mod backend;
-pub mod handlers;
 
 pub use pg_rest_server_common::error::ApiError;
 pub use pg_rest_server_common::handlers::{
     handle_delete, handle_insert, handle_live, handle_metrics, handle_read, handle_ready,
-    handle_root, handle_rpc, handle_update,
+    handle_reload, handle_root, handle_rpc, handle_update, handle_ws,
 };
 
 use std::sync::Arc;
@@ -13,7 +12,6 @@ use axum::routing::{get, post};
 use axum::Router;
 
 use crate::backend::PgWiredBackend;
-use crate::handlers::{handle_reload, handle_ws};
 use pg_rest_server_common::state::AppState;
 
 pub fn build_router(state: Arc<AppState<PgWiredBackend>>) -> Router {
@@ -22,8 +20,8 @@ pub fn build_router(state: Arc<AppState<PgWiredBackend>>) -> Router {
         .route("/live", get(handle_live))
         .route("/ready", get(handle_ready::<PgWiredBackend>))
         .route("/metrics", get(handle_metrics::<PgWiredBackend>))
-        .route("/reload", post(handle_reload))
-        .route("/ws", get(handle_ws))
+        .route("/reload", post(handle_reload::<PgWiredBackend>))
+        .route("/ws", get(handle_ws::<PgWiredBackend>))
         .route(
             "/rpc/{function}",
             get(handle_rpc::<PgWiredBackend>).post(handle_rpc::<PgWiredBackend>),

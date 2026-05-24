@@ -4,10 +4,11 @@ use axum::http::StatusCode;
 use pg_query_engine::SqlOutput;
 use pg_rest_server_common::auth::JwtClaims;
 use pg_rest_server_common::backend::Backend;
+use pg_rest_server_common::config::AppConfig;
 use pg_rest_server_common::error::ApiError;
 use pg_rest_server_common::handlers::build_setup_sql;
 use pg_schema_cache::SchemaCache;
-use resolute::SharedPool;
+use resolute::{Client, PgListener, SharedPool};
 
 pub struct ResoluteBackend {
     pub pool: Arc<SharedPool>,
@@ -90,4 +91,56 @@ impl Backend for ResoluteBackend {
             cache.functions.len(),
         )
     }
+
+    async fn build_schema_cache(&self, config: &AppConfig) -> Result<SchemaCache, ApiError> {
+        let client = Client::connect_from_str(&config.database.uri).await?;
+        let cache =
+            pg_schema_cache::resolute::build_schema_cache(&client, &config.database.schemas)
+                .await?;
+        Ok(cache)
+    }
+
+    async fn spawn_listener<'a>(
+        &'a self,
+        uri: &'a str,
+        channel: &'a str,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<(String, String)>, ApiError> {
+        let (user, password, host, port, database) = parse_pg_uri_for_pool(uri)
+            .ok_or_else(|| ApiError::BadRequest("invalid database URI".into()))?;
+        let addr = format!("{host}:{port}");
+
+        let mut listener = PgListener::connect(&addr, &user, &password, &database).await?;
+        listener.listen(channel).await?;
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Ok(n) = listener.recv().await {
+                if tx.send((n.channel, n.payload)).is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+}
+
+/// Parse a postgres:// URI into (user, password, host, port, database).
+fn parse_pg_uri_for_pool(uri: &str) -> Option<(String, String, String, u16, String)> {
+    let rest = uri
+        .strip_prefix("postgres://")
+        .or_else(|| uri.strip_prefix("postgresql://"))?;
+    let rest = rest.split('?').next().unwrap_or(rest);
+    let (auth, hostdb) = rest.split_once('@').unwrap_or(("postgres:postgres", rest));
+    let (user, password) = auth.split_once(':').unwrap_or((auth, ""));
+    let (hostport, database) = hostdb.split_once('/').unwrap_or((hostdb, "postgres"));
+    let (host, port_str) = hostport.split_once(':').unwrap_or((hostport, "5432"));
+    let port: u16 = port_str.parse().unwrap_or(5432);
+    Some((
+        user.to_string(),
+        password.to_string(),
+        host.to_string(),
+        port,
+        database.to_string(),
+    ))
 }

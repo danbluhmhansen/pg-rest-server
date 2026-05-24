@@ -433,6 +433,7 @@ impl From<pg_query_engine::ParseError> for HandlerError {
 
 use std::sync::Arc;
 
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -902,4 +903,90 @@ pub async fn handle_metrics<B: Backend>(
         [("content-type", "text/plain; version=0.0.4")],
         body,
     )
+}
+
+// ---------------------------------------------------------------------------
+// Schema reload (generic)
+// ---------------------------------------------------------------------------
+
+pub async fn handle_reload<B: Backend>(
+    State(state): State<Arc<AppState<B>>>,
+) -> Result<Response, ApiError> {
+    let cache = state.backend.build_schema_cache(&state.config).await?;
+
+    let tables = cache.tables.len();
+    let functions = cache.functions.len();
+    state.schema_cache_tx.send(Arc::new(cache)).ok();
+
+    let specs = state.rebuild_openapi_cache();
+    *state.openapi_cache.write().await = specs;
+
+    Ok((
+        StatusCode::OK,
+        [("content-type", "application/json")],
+        serde_json::json!({
+            "message": "schema cache reloaded",
+            "tables": tables,
+            "functions": functions,
+        })
+        .to_string(),
+    )
+        .into_response())
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket NOTIFY forwarding (generic)
+// ---------------------------------------------------------------------------
+
+pub async fn handle_ws<B: Backend>(
+    State(state): State<Arc<AppState<B>>>,
+    Query(params): Query<HashMap<String, String>>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let channel = params
+        .get("channel")
+        .cloned()
+        .unwrap_or_else(|| "pgrst".to_string());
+    let uri = state.config.database.uri.clone();
+    let state = Arc::clone(&state);
+
+    ws.on_upgrade(move |mut socket| async move {
+        match state.backend.spawn_listener(&uri, &channel).await {
+            Ok(rx) => ws_handler_generic(socket, rx).await,
+            Err(e) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::json!({"error": e.to_string()})
+                            .to_string()
+                            .into(),
+                    ))
+                    .await;
+            }
+        }
+    })
+}
+
+async fn ws_handler_generic(
+    mut socket: WebSocket,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<(String, String)>,
+) {
+    loop {
+        tokio::select! {
+            Some((ch, payload)) = rx.recv() => {
+                let msg = serde_json::json!({
+                    "channel": ch,
+                    "payload": payload,
+                });
+                if socket.send(Message::Text(msg.to_string().into())).await.is_err() {
+                    break;
+                }
+            }
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(Message::Close(_))) | None => break,
+                    _ => {}
+                }
+            }
+        }
+    }
 }

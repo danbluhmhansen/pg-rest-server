@@ -4,9 +4,11 @@ use axum::http::StatusCode;
 use pg_query_engine::SqlOutput;
 use pg_rest_server_common::auth::JwtClaims;
 use pg_rest_server_common::backend::Backend;
+use pg_rest_server_common::config::AppConfig;
 use pg_rest_server_common::error::ApiError;
 use pg_rest_server_common::handlers::build_setup_sql;
 use pg_schema_cache::SchemaCache;
+use tokio_postgres::NoTls;
 
 pub struct PgWiredBackend {
     pub conn_pool: Arc<pg_pool::ConnPool<pg_pool::wire::WirePoolable>>,
@@ -111,5 +113,44 @@ impl Backend for PgWiredBackend {
             cache.tables.len(),
             cache.functions.len(),
         )
+    }
+
+    async fn build_schema_cache(&self, config: &AppConfig) -> Result<SchemaCache, ApiError> {
+        let (client, conn) = tokio_postgres::connect(&config.database.uri, NoTls).await?;
+        tokio::spawn(async move {
+            conn.await.ok();
+        });
+        let cache =
+            pg_schema_cache::tokio_postgres::build_schema_cache(&client, &config.database.schemas)
+                .await?;
+        drop(client);
+        Ok(cache)
+    }
+
+    async fn spawn_listener<'a>(
+        &'a self,
+        uri: &'a str,
+        channel: &'a str,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<(String, String)>, ApiError> {
+        let (client, mut connection) = tokio_postgres::connect(uri, NoTls).await?;
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Some(Ok(tokio_postgres::AsyncMessage::Notification(n))) =
+                std::future::poll_fn(|cx| connection.poll_message(cx)).await
+            {
+                if tx
+                    .send((n.channel().to_string(), n.payload().to_string()))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+
+        let quoted = format!("\"{}\"", channel.replace('"', "\"\""));
+        client.execute(&format!("LISTEN {quoted}"), &[]).await?;
+
+        Ok(rx)
     }
 }

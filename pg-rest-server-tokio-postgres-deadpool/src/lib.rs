@@ -1,10 +1,9 @@
 pub mod backend;
-pub mod handlers;
 
 pub use pg_rest_server_common::error::ApiError;
 pub use pg_rest_server_common::handlers::{
     handle_delete, handle_insert, handle_live, handle_metrics, handle_read, handle_ready,
-    handle_root, handle_rpc, handle_update,
+    handle_reload, handle_root, handle_rpc, handle_update, handle_ws,
 };
 
 use std::sync::Arc;
@@ -13,7 +12,6 @@ use axum::routing::{get, post};
 use axum::Router;
 
 use crate::backend::DeadpoolBackend;
-use crate::handlers::{handle_reload, handle_ws};
 use pg_rest_server_common::state::AppState;
 
 pub fn build_router(state: Arc<AppState<DeadpoolBackend>>) -> Router {
@@ -22,8 +20,8 @@ pub fn build_router(state: Arc<AppState<DeadpoolBackend>>) -> Router {
         .route("/live", get(handle_live))
         .route("/ready", get(handle_ready::<DeadpoolBackend>))
         .route("/metrics", get(handle_metrics::<DeadpoolBackend>))
-        .route("/reload", post(handle_reload))
-        .route("/ws", get(handle_ws))
+        .route("/reload", post(handle_reload::<DeadpoolBackend>))
+        .route("/ws", get(handle_ws::<DeadpoolBackend>))
         .route(
             "/rpc/{function}",
             get(handle_rpc::<DeadpoolBackend>).post(handle_rpc::<DeadpoolBackend>),

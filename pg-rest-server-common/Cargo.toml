@@ -18,8 +18,8 @@ toml = "0.8"
 pg-schema-cache-types = { path = "../pg-schema-cache-types", version = "0.2.0" }
 
 # HTTP types (re-exported via axum::http by consumers)
-axum = { version = "0.8", default-features = false, features = ["json", "query"] }
-tokio = { version = "1", features = ["sync"] }
+axum = { version = "0.8", default-features = false, features = ["json", "query", "ws"] }
+tokio = { version = "1", features = ["sync", "macros"] }
 
 # JWT auth
 jsonwebtoken = "9"
